@@ -23,7 +23,7 @@ fn handle_connection(mut stream: TcpStream) {
 
     let response = match reader.lines().next() {
         Some(Ok(line)) => {
-            if line == "GET / HTTP 1.1" {
+            if line == "GET / HTTP/1.1" {
                 String::from("HTTP/1.1 200 OK\r\n\r\n")
             } else {
                 String::from("HTTP/1.1 404 Not Found\r\n\r\n")
