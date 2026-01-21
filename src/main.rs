@@ -1,5 +1,5 @@
 use std::{
-    io::Write,
+    io::{BufRead, BufReader, Write},
     net::{TcpListener, TcpStream},
 };
 
@@ -19,6 +19,18 @@ fn main() {
 }
 
 fn handle_connection(mut stream: TcpStream) {
-    let response = format!("HTTP/1.1 200 OK\r\n\r\n");
+    let reader = BufReader::new(&mut stream);
+
+    let response = match reader.lines().next() {
+        Some(Ok(line)) => {
+            if line == "GET / HTTP 1.1" {
+                String::from("HTTP/1.1 200 OK\r\n\r\n")
+            } else {
+                String::from("HTTP/1.1 404 Not Found\r\n\r\n")
+            }
+        }
+        _ => String::from("HTTP/1.1 500 Bad Request\r\n\r\n"),
+    };
+
     stream.write_all(response.as_bytes()).unwrap();
 }
