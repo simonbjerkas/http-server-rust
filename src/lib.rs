@@ -3,12 +3,7 @@ mod error;
 use anyhow::Result;
 use error::ServerError;
 
-use std::{
-    collections::HashMap,
-    fmt::Display,
-    io::{self, BufRead},
-    str::FromStr,
-};
+use std::{collections::HashMap, fmt::Display, io::BufRead, str::FromStr};
 
 pub enum StatusCode {
     Ok,
@@ -28,7 +23,7 @@ impl Display for StatusCode {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Protocol {
     Get,
     Post,
@@ -45,6 +40,7 @@ impl FromStr for Protocol {
     }
 }
 
+#[derive(Debug)]
 pub struct Request {
     pub protocol: Protocol,
     pub path: String,
@@ -53,42 +49,50 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn build(req: impl BufRead) -> Result<Request> {
-        let mut iter = req.lines();
-        let Some(Ok(req_line)) = iter.next() else {
-            return Err(ServerError::BadRequest.into());
-        };
+    pub fn build(mut req: impl BufRead) -> Result<Request> {
+        let mut req_line = String::new();
+        req.read_line(&mut req_line)?;
+        let req_line = req_line.trim_end_matches(&['\r', '\n']);
+
         let mut req_line_iter = req_line.split_ascii_whitespace();
 
         let protocol = match req_line_iter.next() {
             Some(p) => p.parse::<Protocol>()?,
-            None => return Err(ServerError::BadRequestLine(req_line).into()),
+            None => return Err(ServerError::BadRequestLine(req_line.to_string()).into()),
         };
 
         let path = match req_line_iter.next() {
             Some(p) => p.to_string(),
-            None => return Err(ServerError::BadRequestLine(req_line).into()),
+            None => return Err(ServerError::BadRequestLine(req_line.to_string()).into()),
         };
 
+        let mut line = String::new();
         let mut headers = HashMap::new();
-        while let Some(header) = iter.next() {
-            let Ok(header) = header else {
-                return Err(ServerError::BadRequest.into());
-            };
-            if header.is_empty() {
+        loop {
+            line.clear();
+            req.read_line(&mut line)?;
+
+            let line = line.trim_end_matches(['\r', '\n']);
+            if line.is_empty() {
                 break;
             };
 
-            let Some((key, val)) = header.split_once(':') else {
-                return Err(ServerError::BadHeader(header).into());
-            };
+            let (key, val) = line
+                .split_once(':')
+                .ok_or(ServerError::BadHeader(line.to_string()))?;
 
             headers.insert(key.trim().to_string(), val.trim().to_string());
         }
 
-        let collect_string = || -> Result<String, io::Error> { iter.collect() };
+        let content_length = headers
+            .get("Content-Lenght")
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(0);
 
-        let body = collect_string()?;
+        let mut body = Vec::with_capacity(content_length);
+        req.read_exact(&mut body)?;
+
+        let body = String::from_utf8(body)?;
 
         Ok(Request {
             protocol,
