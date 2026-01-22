@@ -3,7 +3,12 @@ mod error;
 use anyhow::Result;
 use error::ServerError;
 
-use std::{fmt::Display, str::FromStr};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    io::{self, BufRead},
+    str::FromStr,
+};
 
 pub enum StatusCode {
     Ok,
@@ -40,33 +45,56 @@ impl FromStr for Protocol {
     }
 }
 
-pub struct RequestLine {
-    protocol: Protocol,
-    path: String,
+pub struct Request {
+    pub protocol: Protocol,
+    pub path: String,
+    pub headers: HashMap<String, String>,
+    pub body: String,
 }
 
-impl RequestLine {
-    pub fn build(line: String) -> Result<RequestLine> {
-        let mut iter = line.split_ascii_whitespace();
+impl Request {
+    pub fn build(req: impl BufRead) -> Result<Request> {
+        let mut iter = req.lines();
+        let Some(Ok(req_line)) = iter.next() else {
+            return Err(ServerError::BadRequest.into());
+        };
+        let mut req_line_iter = req_line.split_ascii_whitespace();
 
-        let protocol = match iter.next() {
+        let protocol = match req_line_iter.next() {
             Some(p) => p.parse::<Protocol>()?,
-            None => return Err(ServerError::BadRequestLine(line).into()),
+            None => return Err(ServerError::BadRequestLine(req_line).into()),
         };
 
-        let path = match iter.next() {
+        let path = match req_line_iter.next() {
             Some(p) => p.to_string(),
-            None => return Err(ServerError::BadRequestLine(line).into()),
+            None => return Err(ServerError::BadRequestLine(req_line).into()),
         };
 
-        Ok(RequestLine { protocol, path })
-    }
+        let mut headers = HashMap::new();
+        while let Some(header) = iter.next() {
+            let Ok(header) = header else {
+                return Err(ServerError::BadRequest.into());
+            };
+            if header.is_empty() {
+                break;
+            };
 
-    pub fn protocol(&self) -> Protocol {
-        self.protocol.clone()
-    }
+            let Some((key, val)) = header.split_once(':') else {
+                return Err(ServerError::BadHeader(header).into());
+            };
 
-    pub fn path(&self) -> String {
-        self.path.clone()
+            headers.insert(key.trim().to_string(), val.trim().to_string());
+        }
+
+        let collect_string = || -> Result<String, io::Error> { iter.collect() };
+
+        let body = collect_string()?;
+
+        Ok(Request {
+            protocol,
+            path,
+            headers,
+            body,
+        })
     }
 }
