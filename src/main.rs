@@ -1,3 +1,5 @@
+use codecrafters_http_server::{Protocol, RequestLine, StatusCode};
+
 use std::{
     io::{BufRead, BufReader, Write},
     net::{TcpListener, TcpStream},
@@ -20,17 +22,40 @@ fn main() {
 
 fn handle_connection(mut stream: TcpStream) {
     let reader = BufReader::new(&mut stream);
+    let request_line = reader.lines().next();
 
-    let response = match reader.lines().next() {
-        Some(Ok(line)) => {
-            if line == "GET / HTTP/1.1" {
-                String::from("HTTP/1.1 200 OK\r\n\r\n")
-            } else {
-                String::from("HTTP/1.1 404 Not Found\r\n\r\n")
-            }
-        }
-        _ => String::from("HTTP/1.1 500 Bad Request\r\n\r\n"),
+    let mut write_stream = move |res: String| {
+        let res = format!("{}", res);
+        stream.write_all(res.as_bytes()).unwrap();
     };
 
-    stream.write_all(response.as_bytes()).unwrap();
+    let Some(Ok(line)) = request_line else {
+        return write_stream(StatusCode::BadRequest.to_string());
+    };
+
+    let Ok(request_line) = RequestLine::build(line) else {
+        return write_stream(StatusCode::BadRequest.to_string());
+    };
+
+    match request_line.protocol() {
+        Protocol::Get => match request_line.path().as_str() {
+            "/" => write_stream(status_string(StatusCode::Ok)),
+            path if path.starts_with("/echo/") => {
+                let (_, val) = path[1..].split_once('/').unwrap_or(("", ""));
+                let res = format!(
+                    "{}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{val}",
+                    StatusCode::Ok,
+                    val.len()
+                );
+
+                write_stream(res)
+            }
+            _ => write_stream(status_string(StatusCode::NotFound)),
+        },
+        Protocol::Post => write_stream(status_string(StatusCode::BadRequest)),
+    }
+}
+
+fn status_string(status_code: StatusCode) -> String {
+    format!("{status_code}\r\n\r\n")
 }
