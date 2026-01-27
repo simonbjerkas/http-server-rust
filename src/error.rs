@@ -13,4 +13,7 @@ pub enum ServerError {
 
     #[error("not valid header: {0}")]
     BadHeader(String),
+
+    #[error("Worker {0} was poisoned")]
+    PoisonedWorker(usize),
 }

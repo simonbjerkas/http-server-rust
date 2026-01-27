@@ -1,104 +1,106 @@
 mod error;
+mod request;
+
+pub use request::{Protocol, Request, StatusCode};
+
+use std::{
+    sync::{Arc, Mutex, mpsc},
+    thread,
+};
 
 use anyhow::Result;
 use error::ServerError;
 
-use std::{collections::HashMap, fmt::Display, io::BufRead, str::FromStr};
+type Job = Box<dyn FnOnce() + Send + 'static>;
 
-pub enum StatusCode {
-    Ok,
-    BadRequest,
-    NotFound,
+pub struct ThreadPool {
+    workers: Vec<Worker>,
+    sender: Option<mpsc::Sender<Job>>,
 }
 
-impl Display for StatusCode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let gen_line = |code| format!("HTTP/1.1 {code}");
+impl ThreadPool {
+    /// Create a new threadpool
+    ///
+    /// the size is the number of threads in the pool
+    ///
+    /// # Panics
+    ///
+    /// the `new` function will panic if the size is zero
+    pub fn new(size: usize) -> ThreadPool {
+        assert!(size > 0);
 
-        match self {
-            StatusCode::Ok => write!(f, "{} OK", gen_line(200)),
-            StatusCode::BadRequest => write!(f, "{} Bad Request", gen_line(500)),
-            StatusCode::NotFound => write!(f, "{} Not Found", gen_line(404)),
+        let (sender, receiver) = mpsc::channel();
+        let receiver = Arc::new(Mutex::new(receiver));
+        let mut workers = Vec::with_capacity(size);
+
+        for id in 0..size {
+            workers.push(Worker::new(id, Arc::clone(&receiver)));
+        }
+
+        ThreadPool {
+            workers,
+            sender: Some(sender),
+        }
+    }
+
+    pub fn execute<F>(&self, f: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        let job = Box::new(f);
+        self.sender.as_ref().unwrap().send(job).unwrap();
+    }
+}
+
+impl Drop for ThreadPool {
+    /// Custom destructor for threadpool
+    ///
+    /// # Panics
+    ///
+    /// the `drop` function will panic if the worker fails to join, or the woker got poisoned when running
+    fn drop(&mut self) {
+        drop(self.sender.take());
+
+        for worker in self.workers.drain(..) {
+            println!("Shutting down worker {}", worker.id);
+
+            worker
+                .thread
+                .join()
+                .expect("worker paiced during drop")
+                .unwrap();
         }
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum Protocol {
-    Get,
-    Post,
+struct Worker {
+    id: usize,
+    thread: thread::JoinHandle<Result<()>>,
 }
 
-impl FromStr for Protocol {
-    type Err = ServerError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "GET" => Ok(Protocol::Get),
-            "POST" => Ok(Protocol::Post),
-            _ => Err(ServerError::BadProtocol(s.to_string())),
-        }
-    }
-}
+impl Worker {
+    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+        let thread = thread::spawn(move || -> Result<()> {
+            loop {
+                let job = receiver
+                    .lock()
+                    .map_err(|_| ServerError::PoisonedWorker(id))?
+                    .recv();
 
-#[derive(Debug)]
-pub struct Request {
-    pub protocol: Protocol,
-    pub path: String,
-    pub headers: HashMap<String, String>,
-    pub body: String,
-}
+                match job {
+                    Ok(job) => {
+                        println!("Worker {id} got a job; executing");
+                        job();
+                    }
+                    Err(_) => {
+                        println!("Worker {id} disconnected; shutting down");
+                        break;
+                    }
+                }
+            }
+            Ok(())
+        });
 
-impl Request {
-    pub fn build(mut req: impl BufRead) -> Result<Request> {
-        let mut req_line = String::new();
-        req.read_line(&mut req_line)?;
-        let req_line = req_line.trim_end_matches(&['\r', '\n']);
-
-        let mut req_line_iter = req_line.split_ascii_whitespace();
-
-        let protocol = match req_line_iter.next() {
-            Some(p) => p.parse::<Protocol>()?,
-            None => return Err(ServerError::BadRequestLine(req_line.to_string()).into()),
-        };
-
-        let path = match req_line_iter.next() {
-            Some(p) => p.to_string(),
-            None => return Err(ServerError::BadRequestLine(req_line.to_string()).into()),
-        };
-
-        let mut line = String::new();
-        let mut headers = HashMap::new();
-        loop {
-            line.clear();
-            req.read_line(&mut line)?;
-
-            let line = line.trim_end_matches(['\r', '\n']);
-            if line.is_empty() {
-                break;
-            };
-
-            let (key, val) = line
-                .split_once(':')
-                .ok_or(ServerError::BadHeader(line.to_string()))?;
-
-            headers.insert(key.trim().to_string(), val.trim().to_string());
-        }
-
-        let content_length = headers
-            .get("Content-Lenght")
-            .and_then(|v| v.parse::<usize>().ok())
-            .unwrap_or(0);
-
-        let mut body = Vec::with_capacity(content_length);
-        req.read_exact(&mut body)?;
-
-        let body = String::from_utf8(body)?;
-
-        Ok(Request {
-            protocol,
-            path,
-            headers,
-            body,
-        })
+        Worker { id, thread }
     }
 }

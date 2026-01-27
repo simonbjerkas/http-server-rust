@@ -1,4 +1,4 @@
-use codecrafters_http_server::{Protocol, Request, StatusCode};
+use codecrafters_http_server::{Protocol, Request, StatusCode, ThreadPool};
 
 use std::{
     io::{BufReader, Write},
@@ -7,11 +7,14 @@ use std::{
 
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
+    let pool = ThreadPool::new(10);
 
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                handle_connection(stream);
+                pool.execute(|| {
+                    handle_connection(stream);
+                });
             }
             Err(e) => {
                 println!("error: {}", e);
