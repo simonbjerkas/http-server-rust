@@ -51,7 +51,7 @@ impl Request {
         }
 
         let content_length = others
-            .remove("Content-Lenght")
+            .remove("Content-Length")
             .and_then(|v| v.parse::<usize>().ok())
             .unwrap_or(0);
         let content_type = others
@@ -60,7 +60,7 @@ impl Request {
 
         let headers = Headers::new(Some(content_length), content_type, others);
 
-        let mut body = Vec::with_capacity(content_length);
+        let mut body = vec![0u8; content_length];
         req.read_exact(&mut body)?;
 
         Ok(Request {
