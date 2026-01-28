@@ -86,13 +86,13 @@ pub struct Headers {
 
 impl Headers {
     pub fn new(
-        content_length: usize,
-        content_type: ContentType,
+        content_length: Option<usize>,
+        content_type: Option<ContentType>,
         others: HashMap<String, String>,
     ) -> Headers {
         Headers {
-            content_length: Some(content_length),
-            content_type: Some(content_type),
+            content_length,
+            content_type,
             others,
         }
     }

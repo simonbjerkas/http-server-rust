@@ -56,12 +56,9 @@ impl Request {
             .unwrap_or(0);
         let content_type = others
             .remove("Content-Type")
-            .and_then(|v| v.parse::<ContentType>().ok())
-            .ok_or(ServerError::BadHeader(String::from(
-                "Missing Content-Type header",
-            )))?;
+            .and_then(|v| v.parse::<ContentType>().ok());
 
-        let headers = Headers::new(content_length, content_type, others);
+        let headers = Headers::new(Some(content_length), content_type, others);
 
         let mut body = Vec::with_capacity(content_length);
         req.read_exact(&mut body)?;

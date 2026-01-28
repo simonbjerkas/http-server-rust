@@ -72,7 +72,8 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Config>) {
             "/" => write_stream(Response::empty()),
             path if path.starts_with("/echo/") => {
                 let val = path.strip_prefix("/echo/").unwrap_or("");
-                let headers = Headers::new(val.len(), ContentType::Text, HashMap::new());
+                let headers =
+                    Headers::new(Some(val.len()), Some(ContentType::Text), HashMap::new());
                 let res = Response::new(StatusCode::Ok, headers, val.to_string());
 
                 write_stream(res)
@@ -82,13 +83,14 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Config>) {
                     return write_stream(Response::bad());
                 };
 
-                let headers = Headers::new(val.len(), ContentType::Text, HashMap::new());
+                let headers =
+                    Headers::new(Some(val.len()), Some(ContentType::Text), HashMap::new());
                 let res = Response::new(StatusCode::Ok, headers, val.to_string());
 
                 write_stream(res)
             }
-            path if path.starts_with("/file/") => {
-                let Some(file_name) = path.strip_prefix("/file/") else {
+            path if path.starts_with("/files/") => {
+                let Some(file_name) = path.strip_prefix("/files/") else {
                     return write_stream(Response::not_found());
                 };
                 let mut file_path = PathBuf::from(config.directory.clone());
@@ -103,7 +105,8 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Config>) {
                     return write_stream(Response::bad());
                 };
 
-                let headers = Headers::new(content.len(), ContentType::File, HashMap::new());
+                let headers =
+                    Headers::new(Some(content.len()), Some(ContentType::File), HashMap::new());
                 let res = Response::new(StatusCode::Ok, headers, content);
 
                 write_stream(res)
