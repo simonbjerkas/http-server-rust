@@ -56,4 +56,12 @@ impl Response {
             body: Vec::new(),
         }
     }
+
+    pub fn created() -> Response {
+        Response {
+            status: StatusCode::Created,
+            headers: Headers::default(),
+            body: Vec::new(),
+        }
+    }
 }

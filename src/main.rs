@@ -113,6 +113,30 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Config>) {
             }
             _ => write_stream(Response::not_found()),
         },
-        Protocol::Post => write_stream(Response::bad()),
+        Protocol::Post => match req.path.as_str() {
+            path if path.starts_with("/files/") => {
+                let Some(file_name) = path.strip_prefix("/files/") else {
+                    return write_stream(Response::not_found());
+                };
+
+                let Some(ContentType::File) = req.headers.content_type else {
+                    return write_stream(Response::bad());
+                };
+
+                let mut file_path = PathBuf::from(config.directory.clone());
+                file_path.push(file_name);
+
+                let Ok(mut file) = fs::File::create(file_path) else {
+                    return write_stream(Response::bad());
+                };
+
+                if let Err(_) = file.write_all(&req.body) {
+                    return write_stream(Response::bad());
+                }
+
+                write_stream(Response::created())
+            }
+            _ => write_stream(Response::not_found()),
+        },
     };
 }

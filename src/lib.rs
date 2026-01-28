@@ -16,6 +16,7 @@ pub enum StatusCode {
     Ok,
     BadRequest,
     NotFound,
+    Created,
 }
 
 impl StatusCode {
@@ -30,6 +31,7 @@ impl StatusCode {
             StatusCode::Ok => format!("{} OK", gen_line(200)),
             StatusCode::BadRequest => format!("{} Bad Request", gen_line(500)),
             StatusCode::NotFound => format!("{} Not Found", gen_line(404)),
+            Self::Created => format!("{} Created", gen_line(201)),
         }
     }
 }
