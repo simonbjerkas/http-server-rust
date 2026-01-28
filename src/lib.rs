@@ -1,106 +1,124 @@
 mod error;
+mod pool;
 mod request;
+mod response;
 
-pub use request::{Protocol, Request, StatusCode};
+pub use pool::ThreadPool;
+pub use request::Request;
+pub use response::Response;
 
-use std::{
-    sync::{Arc, Mutex, mpsc},
-    thread,
-};
+use std::{collections::HashMap, fmt::Display, str::FromStr};
 
 use anyhow::Result;
 use error::ServerError;
 
-type Job = Box<dyn FnOnce() + Send + 'static>;
-
-pub struct ThreadPool {
-    workers: Vec<Worker>,
-    sender: Option<mpsc::Sender<Job>>,
+pub enum StatusCode {
+    Ok,
+    BadRequest,
+    NotFound,
 }
 
-impl ThreadPool {
-    /// Create a new threadpool
-    ///
-    /// the size is the number of threads in the pool
-    ///
-    /// # Panics
-    ///
-    /// the `new` function will panic if the size is zero
-    pub fn new(size: usize) -> ThreadPool {
-        assert!(size > 0);
-
-        let (sender, receiver) = mpsc::channel();
-        let receiver = Arc::new(Mutex::new(receiver));
-        let mut workers = Vec::with_capacity(size);
-
-        for id in 0..size {
-            workers.push(Worker::new(id, Arc::clone(&receiver)));
-        }
-
-        ThreadPool {
-            workers,
-            sender: Some(sender),
-        }
+impl StatusCode {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.phrase().as_bytes().to_vec()
     }
 
-    pub fn execute<F>(&self, f: F)
-    where
-        F: FnOnce() + Send + 'static,
-    {
-        let job = Box::new(f);
-        self.sender.as_ref().unwrap().send(job).unwrap();
-    }
-}
+    fn phrase(&self) -> String {
+        let gen_line = |code| format!("HTTP/1.1 {code}");
 
-impl Drop for ThreadPool {
-    /// Custom destructor for threadpool
-    ///
-    /// # Panics
-    ///
-    /// the `drop` function will panic if the worker fails to join, or the woker got poisoned when running
-    fn drop(&mut self) {
-        drop(self.sender.take());
-
-        for worker in self.workers.drain(..) {
-            println!("Shutting down worker {}", worker.id);
-
-            worker
-                .thread
-                .join()
-                .expect("worker paiced during drop")
-                .unwrap();
+        match self {
+            StatusCode::Ok => format!("{} OK", gen_line(200)),
+            StatusCode::BadRequest => format!("{} Bad Request", gen_line(500)),
+            StatusCode::NotFound => format!("{} Not Found", gen_line(404)),
         }
     }
 }
 
-struct Worker {
-    id: usize,
-    thread: thread::JoinHandle<Result<()>>,
+#[derive(Clone, Debug)]
+pub enum Protocol {
+    Get,
+    Post,
 }
 
-impl Worker {
-    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
-        let thread = thread::spawn(move || -> Result<()> {
-            loop {
-                let job = receiver
-                    .lock()
-                    .map_err(|_| ServerError::PoisonedWorker(id))?
-                    .recv();
+impl FromStr for Protocol {
+    type Err = ServerError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "GET" => Ok(Protocol::Get),
+            "POST" => Ok(Protocol::Post),
+            _ => Err(ServerError::BadProtocol(s.to_string())),
+        }
+    }
+}
 
-                match job {
-                    Ok(job) => {
-                        println!("Worker {id} got a job; executing");
-                        job();
-                    }
-                    Err(_) => {
-                        println!("Worker {id} disconnected; shutting down");
-                        break;
-                    }
-                }
-            }
-            Ok(())
-        });
+#[derive(Debug, Clone)]
+pub enum ContentType {
+    Text,
+    File,
+}
 
-        Worker { id, thread }
+impl FromStr for ContentType {
+    type Err = ServerError;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "application/octet-stream" => Ok(ContentType::File),
+            "text/plain" => Ok(ContentType::Text),
+            other => Err(ServerError::BadHeader(other.to_string())),
+        }
+    }
+}
+
+impl Display for ContentType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ContentType::File => write!(f, "application/octet-stream"),
+            ContentType::Text => write!(f, "text/plain"),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Headers {
+    pub content_length: Option<usize>,
+    pub content_type: Option<ContentType>,
+    others: HashMap<String, String>,
+}
+
+impl Headers {
+    pub fn new(
+        content_length: usize,
+        content_type: ContentType,
+        others: HashMap<String, String>,
+    ) -> Headers {
+        Headers {
+            content_length: Some(content_length),
+            content_type: Some(content_type),
+            others,
+        }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+
+        let mut headers = self.others.clone();
+        if let Some(content_lenght) = self.content_length {
+            headers.insert(String::from("Content-Length"), content_lenght.to_string());
+        }
+        if let Some(content_type) = self.content_type.as_ref() {
+            headers.insert(
+                String::from("Content-Type"),
+                content_type.clone().to_string(),
+            );
+        }
+
+        for (key, val) in headers {
+            out.extend_from_slice(format!("{key}: {val}\r\n").as_bytes());
+        }
+
+        out
+    }
+
+    pub fn get(&self, key: &str) -> Option<&String> {
+        self.others.get(key)
     }
 }

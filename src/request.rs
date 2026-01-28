@@ -1,50 +1,17 @@
-use std::{collections::HashMap, fmt::Display, io::BufRead, str::FromStr};
+use std::{collections::HashMap, io::BufRead};
 
 use anyhow::Result;
 
-use super::error::ServerError;
+use crate::ContentType;
 
-pub enum StatusCode {
-    Ok,
-    BadRequest,
-    NotFound,
-}
-
-impl Display for StatusCode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let gen_line = |code| format!("HTTP/1.1 {code}");
-
-        match self {
-            StatusCode::Ok => write!(f, "{} OK", gen_line(200)),
-            StatusCode::BadRequest => write!(f, "{} Bad Request", gen_line(500)),
-            StatusCode::NotFound => write!(f, "{} Not Found", gen_line(404)),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum Protocol {
-    Get,
-    Post,
-}
-
-impl FromStr for Protocol {
-    type Err = ServerError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "GET" => Ok(Protocol::Get),
-            "POST" => Ok(Protocol::Post),
-            _ => Err(ServerError::BadProtocol(s.to_string())),
-        }
-    }
-}
+use super::{Headers, Protocol, ServerError};
 
 #[derive(Debug)]
 pub struct Request {
     pub protocol: Protocol,
     pub path: String,
-    pub headers: HashMap<String, String>,
-    pub body: String,
+    pub headers: Headers,
+    pub body: Vec<u8>,
 }
 
 impl Request {
@@ -66,7 +33,7 @@ impl Request {
         };
 
         let mut line = String::new();
-        let mut headers = HashMap::new();
+        let mut others = HashMap::new();
         loop {
             line.clear();
             req.read_line(&mut line)?;
@@ -80,18 +47,24 @@ impl Request {
                 .split_once(':')
                 .ok_or(ServerError::BadHeader(line.to_string()))?;
 
-            headers.insert(key.trim().to_string(), val.trim().to_string());
+            others.insert(key.trim().to_string(), val.trim().to_string());
         }
 
-        let content_length = headers
-            .get("Content-Lenght")
+        let content_length = others
+            .remove("Content-Lenght")
             .and_then(|v| v.parse::<usize>().ok())
             .unwrap_or(0);
+        let content_type = others
+            .remove("Content-Type")
+            .and_then(|v| v.parse::<ContentType>().ok())
+            .ok_or(ServerError::BadHeader(String::from(
+                "Missing Content-Type header",
+            )))?;
+
+        let headers = Headers::new(content_length, content_type, others);
 
         let mut body = Vec::with_capacity(content_length);
         req.read_exact(&mut body)?;
-
-        let body = String::from_utf8(body)?;
 
         Ok(Request {
             protocol,
