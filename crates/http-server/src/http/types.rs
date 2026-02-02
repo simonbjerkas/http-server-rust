@@ -14,6 +14,9 @@ impl StatusCode {
         self.phrase().as_bytes().to_vec()
     }
 
+    ///Generate statuscode string
+    ///
+    /// creates the expected string for the statuscode, i.e. `HTTP 1.1 200 OK`
     fn phrase(&self) -> String {
         let gen_line = |code| format!("HTTP/1.1 {code}");
 
