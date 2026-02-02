@@ -16,4 +16,7 @@ pub enum ServerError {
 
     #[error("Worker {0} was poisoned")]
     PoisonedWorker(usize),
+
+    #[error("Encoding not supported: {0}")]
+    BadEncoding(String),
 }

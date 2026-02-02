@@ -1,4 +1,4 @@
-use super::{Headers, StatusCode};
+use super::{StatusCode, headers::Headers};
 
 pub struct Response {
     status: StatusCode,
@@ -18,6 +18,16 @@ impl Response {
         }
     }
 
+    ///Prepare rsponse to be sent
+    ///
+    ///should be called before sending the response
+    ///
+    /// Adds `Content-Lenght: [body.len()]` header to the response
+    pub fn finalize(&mut self) {
+        self.headers
+            .insert("Content-Length", &self.body.len().to_string());
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::new();
 
@@ -33,7 +43,10 @@ impl Response {
         out
     }
 
-    pub fn empty() -> Response {
+    ///Ok
+    ///
+    ///creates a default empty `200 Ok` response
+    pub fn success() -> Response {
         Response {
             status: StatusCode::Ok,
             headers: Headers::default(),
@@ -41,6 +54,9 @@ impl Response {
         }
     }
 
+    ///Bad Request
+    ///
+    ///creates an empty `500 Bad Request` response
     pub fn bad() -> Response {
         Response {
             status: StatusCode::BadRequest,
@@ -49,6 +65,9 @@ impl Response {
         }
     }
 
+    ///Not found
+    ///
+    /// creates an empty `404 Not Found`response
     pub fn not_found() -> Response {
         Response {
             status: StatusCode::NotFound,
@@ -57,6 +76,9 @@ impl Response {
         }
     }
 
+    ///Created
+    ///
+    /// creates an empty `201 Created` response
     pub fn created() -> Response {
         Response {
             status: StatusCode::Created,

@@ -1,9 +1,6 @@
-use codecrafters_http_server::{
-    ContentType, Headers, Protocol, Request, Response, StatusCode, ThreadPool,
-};
+use minserver::{Protocol, Request, Response, StatusCode, ThreadPool, headers};
 
 use std::{
-    collections::HashMap,
     env, fs,
     io::{BufReader, Read, Write},
     net::{TcpListener, TcpStream},
@@ -63,28 +60,32 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Config>) {
         return stream.write_all(&Response::bad().to_bytes()).unwrap();
     };
 
-    let mut write_stream = |res: Response| {
+    let mut write_stream = |mut res: Response| {
+        res.finalize();
         stream.write_all(&res.to_bytes()).unwrap();
     };
 
     match req.protocol {
         Protocol::Get => match req.path.as_str() {
-            "/" => write_stream(Response::empty()),
+            "/" => write_stream(Response::success()),
             path if path.starts_with("/echo/") => {
                 let val = path.strip_prefix("/echo/").unwrap_or("");
-                let headers =
-                    Headers::new(Some(val.len()), Some(ContentType::Text), HashMap::new());
+
+                let mut headers = headers::Headers::new();
+                headers.set_content_type(headers::ContentType::Text);
+
                 let res = Response::new(StatusCode::Ok, headers, val.to_string());
 
                 write_stream(res)
             }
             path if path.starts_with("/user-agent") => {
-                let Some(val) = req.headers.get("User-Agent") else {
+                let Some(val) = req.headers.user_agent() else {
                     return write_stream(Response::bad());
                 };
 
-                let headers =
-                    Headers::new(Some(val.len()), Some(ContentType::Text), HashMap::new());
+                let mut headers = headers::Headers::new();
+                headers.set_content_type(headers::ContentType::Text);
+
                 let res = Response::new(StatusCode::Ok, headers, val.to_string());
 
                 write_stream(res)
@@ -105,8 +106,9 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Config>) {
                     return write_stream(Response::bad());
                 };
 
-                let headers =
-                    Headers::new(Some(content.len()), Some(ContentType::File), HashMap::new());
+                let mut headers = headers::Headers::new();
+                headers.set_content_type(headers::ContentType::File);
+
                 let res = Response::new(StatusCode::Ok, headers, content);
 
                 write_stream(res)
@@ -119,7 +121,7 @@ fn handle_connection(mut stream: TcpStream, config: Arc<Config>) {
                     return write_stream(Response::not_found());
                 };
 
-                let Some(ContentType::File) = req.headers.content_type else {
+                let Some(headers::ContentType::File) = req.headers.content_type() else {
                     return write_stream(Response::bad());
                 };
 

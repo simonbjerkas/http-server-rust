@@ -1,10 +1,8 @@
-use std::{collections::HashMap, io::BufRead};
+use std::io::BufRead;
 
 use anyhow::Result;
 
-use crate::ContentType;
-
-use super::{Headers, Protocol, ServerError};
+use super::{Protocol, ServerError, headers::Headers};
 
 #[derive(Debug)]
 pub struct Request {
@@ -33,7 +31,7 @@ impl Request {
         };
 
         let mut line = String::new();
-        let mut others = HashMap::new();
+        let mut headers = Headers::new();
         loop {
             line.clear();
             req.read_line(&mut line)?;
@@ -47,18 +45,13 @@ impl Request {
                 .split_once(':')
                 .ok_or(ServerError::BadHeader(line.to_string()))?;
 
-            others.insert(key.trim().to_string(), val.trim().to_string());
+            headers.insert(key, val);
         }
 
-        let content_length = others
-            .remove("Content-Length")
+        let content_length = headers
+            .get("Content-Length")
             .and_then(|v| v.parse::<usize>().ok())
             .unwrap_or(0);
-        let content_type = others
-            .remove("Content-Type")
-            .and_then(|v| v.parse::<ContentType>().ok());
-
-        let headers = Headers::new(Some(content_length), content_type, others);
 
         let mut body = vec![0u8; content_length];
         req.read_exact(&mut body)?;
