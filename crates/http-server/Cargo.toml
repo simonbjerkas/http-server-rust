@@ -1,11 +1,13 @@
 [package]
-name = "minserver"
-version = "0.1.0"
+name = "http-server"
 authors = ["Simon Bjerkås <simon.bjerkas10@gmail.com>"]
-edition = "2024"
-rust-version = "1.91"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 anyhow = "1.0.68"                                # error handling
 bytes = "1.3.0"                                  # helps manage buffers
 thiserror = "1.0.38"                             # error handling
+
+http-server-macros = { path = "../http-server-macros" }

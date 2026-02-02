@@ -1,18 +1,6 @@
-mod error;
-mod pool;
-mod request;
-mod response;
-
-pub mod headers;
-
-pub use pool::ThreadPool;
-pub use request::Request;
-pub use response::Response;
-
 use std::str::FromStr;
 
-use anyhow::Result;
-use error::ServerError;
+use super::{App, ServerError, request::Request, response::Response};
 
 pub enum StatusCode {
     Ok,
@@ -38,19 +26,29 @@ impl StatusCode {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum Protocol {
+#[derive(PartialEq)]
+pub enum Method {
     Get,
     Post,
 }
 
-impl FromStr for Protocol {
+impl FromStr for Method {
     type Err = ServerError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "GET" => Ok(Protocol::Get),
-            "POST" => Ok(Protocol::Post),
-            _ => Err(ServerError::BadProtocol(s.to_string())),
+            "GET" => Ok(Method::Get),
+            "POST" => Ok(Method::Post),
+            _ => Err(ServerError::BadMethod(s.to_string())),
         }
     }
+}
+
+pub struct Route {
+    pub method: Method,
+    pub path: &'static str,
+    pub handler: fn(Request, &App) -> Response,
+}
+
+pub trait Routable {
+    fn route() -> Route;
 }

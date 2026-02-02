@@ -5,8 +5,8 @@ pub enum ServerError {
     #[error("Bad request")]
     BadRequest,
 
-    #[error("not a valid protocol: {0}")]
-    BadProtocol(String),
+    #[error("not a valid method: {0}")]
+    BadMethod(String),
 
     #[error("not valid requestline: {0}")]
     BadRequestLine(String),

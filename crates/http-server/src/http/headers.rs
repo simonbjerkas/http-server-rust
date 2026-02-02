@@ -51,7 +51,7 @@ impl Headers {
 
     pub fn content_type(&self) -> Option<ContentType> {
         self.entries
-            .get("Content-Type")
+            .get("content-type")
             .and_then(|v| v.parse().ok())
     }
 }

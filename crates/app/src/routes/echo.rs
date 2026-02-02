@@ -1,0 +1,12 @@
+use http_server::{App, Headers, Request, Response, get};
+
+#[get("/echo/:msg")]
+pub fn echo(req: Request, _ctx: &App) -> Response {
+    let msg = req.param("msg").unwrap_or("");
+    let mut headers = Headers::new();
+    headers.set_content_type(http_server::headers::ContentType::Text);
+    let mut res = Response::new(http_server::StatusCode::Ok, headers, msg);
+    res.finalize();
+
+    res
+}

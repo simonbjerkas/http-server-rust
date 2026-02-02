@@ -1,0 +1,9 @@
+[package]
+name = "codecrafters-http-server"
+authors = ["Codecrafters <hello@codecrafters.io>"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+http-server = { path = "../http-server" }

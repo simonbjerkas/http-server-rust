@@ -1,15 +1,15 @@
-use std::io::BufRead;
+use std::{collections::HashMap, io::BufRead};
 
 use anyhow::Result;
 
-use super::{Protocol, ServerError, headers::Headers};
+use super::{Method, ServerError, headers::Headers};
 
-#[derive(Debug)]
 pub struct Request {
-    pub protocol: Protocol,
+    pub method: Method,
     pub path: String,
     pub headers: Headers,
     pub body: Vec<u8>,
+    params: HashMap<String, String>,
 }
 
 impl Request {
@@ -20,8 +20,8 @@ impl Request {
 
         let mut req_line_iter = req_line.split_ascii_whitespace();
 
-        let protocol = match req_line_iter.next() {
-            Some(p) => p.parse::<Protocol>()?,
+        let method = match req_line_iter.next() {
+            Some(p) => p.parse::<Method>()?,
             None => return Err(ServerError::BadRequestLine(req_line.to_string()).into()),
         };
 
@@ -57,10 +57,19 @@ impl Request {
         req.read_exact(&mut body)?;
 
         Ok(Request {
-            protocol,
+            method,
             path,
             headers,
             body,
+            params: HashMap::new(),
         })
+    }
+
+    pub fn param(&self, name: &str) -> Option<&str> {
+        self.params.get(name).map(|s| s.as_str())
+    }
+
+    pub fn set_params(&mut self, params: HashMap<String, String>) {
+        self.params = params;
     }
 }
