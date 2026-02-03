@@ -8,14 +8,19 @@ pub use http::{
     headers::{self, Headers},
     request::Request,
     response::Response,
-    types::{Method, Routable, Route, StatusCode},
+    types::{IntoRoute, Method, Route, StatusCode},
 };
-pub use server::Server;
+pub use server::{Server, middleware, scope};
 
 pub use http_server_macros::{get, post};
 
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
+use crate::server::middleware::ScopedMiddleware;
+
+/// Configuration for the `App`struct.
+///
+/// holds the directory from where files should be written and read on the server
 pub struct Config {
     pub directory: PathBuf,
 }
@@ -37,32 +42,35 @@ impl Default for Config {
 pub struct App {
     config: Arc<Config>,
     routes: Vec<Route>,
+    middleware: Vec<middleware::ScopedMiddleware>,
 }
 
 impl App {
-    ///Create a new app
+    /// Create a new app
     ///
-    ///creates a new app with default configs.
+    /// creates a new app with default configs.
     ///
-    ///the service containng routing data for your server.
+    /// the service containng routing data for your server.
     pub fn new() -> App {
         let config = Config::default();
 
         App {
             config: Arc::new(config),
             routes: Vec::new(),
+            middleware: Vec::new(),
         }
     }
 
-    ///Create a new app
+    /// Create a new app
     ///
-    ///creates a new app with supplied configuration.
+    /// creates a new app with supplied configuration.
     ///
-    ///the service containing routing data for your server.
+    /// the service containing routing data for your server.
     pub fn with_config(config: Config) -> App {
         App {
             config: Arc::new(config),
             routes: Vec::new(),
+            middleware: Vec::new(),
         }
     }
 
@@ -70,25 +78,107 @@ impl App {
         &self.config
     }
 
-    ///Registers a service
-    ///
-    ///takes your current app with services and returns a new one with the new service attached
-    pub fn service<T: Routable>(mut self, _: T) -> App {
-        self.routes.push(T::route());
+    pub fn scope(mut self, scope: scope::Scope) -> App {
+        for mw in scope.middleware {
+            self.middleware.push(ScopedMiddleware {
+                middleware: mw,
+                scope: middleware::MiddlewareScope::Prefix(scope.prefix.clone()),
+            });
+        }
+
+        for route in scope.routes {
+            self.routes.push(route);
+        }
+
         self
     }
 
-    pub fn handle(&self, mut req: Request) -> Response {
-        for route in &self.routes {
-            if route.method == req.method {
-                if let Some(params) = match_path(route.path, &req.path) {
-                    req.set_params(params);
-                    return (route.handler)(req, self);
-                }
+    /// Add global middleware
+    ///
+    /// adds a middleware for all routes.
+    ///
+    /// Consumes your current app and returns a new one
+    pub fn middleware<M: middleware::Middleware + 'static>(mut self, mw: M) -> App {
+        self.middleware.push(ScopedMiddleware {
+            middleware: Arc::new(mw),
+            scope: middleware::MiddlewareScope::Global,
+        });
+
+        self
+    }
+
+    /// Scoped middleware
+    ///
+    /// adds a middleware for routes under the given prefix
+    ///
+    /// Consumes your current app and returns a new one
+    pub fn middleware_for<M: middleware::Middleware + 'static>(
+        mut self,
+        prefix: impl Into<String>,
+        mw: M,
+    ) -> App {
+        self.middleware.push(ScopedMiddleware {
+            middleware: Arc::new(mw),
+            scope: middleware::MiddlewareScope::Prefix(prefix.into()),
+        });
+
+        self
+    }
+
+    /// Registers a service
+    ///
+    /// takes your current app with services and returns a new one with the new service attached
+    pub fn service<R: IntoRoute>(mut self, route: R) -> App {
+        self.routes.push(route.into_route());
+        self
+    }
+
+    pub(crate) fn handle(&self, mut req: Request) -> Response {
+        let Some(route) = self.match_route(&mut req) else {
+            return Response::not_found();
+        };
+
+        let applicable_middleware: Vec<&Arc<dyn middleware::Middleware>> = self
+            .middleware
+            .iter()
+            .filter(|m| m.matches(&req.path))
+            .map(|m| &m.middleware)
+            .chain(route.middleware.iter())
+            .collect();
+
+        self.execute_chain(req, &applicable_middleware, &route.handler)
+    }
+
+    fn execute_chain(
+        &self,
+        req: Request,
+        middleware: &[&Arc<dyn middleware::Middleware>],
+        handler: &(dyn Fn(Request, &App) -> Response + Send + Sync),
+    ) -> Response {
+        match middleware.split_first() {
+            None => handler(req, self),
+            Some((first, rest)) => {
+                let rest = rest.to_vec();
+                let next = middleware::Next {
+                    handler: Box::new(move |req, app: &App| app.execute_chain(req, &rest, handler)),
+                };
+
+                first.call(req, self, next)
             }
         }
+    }
 
-        Response::not_found()
+    fn match_route(&self, req: &mut Request) -> Option<&Route> {
+        self.routes.iter().find_map(|route| {
+            if route.method != req.method {
+                return None;
+            }
+
+            let params = match_path(&route.path, &req.path)?;
+            req.set_params(params);
+
+            Some(route)
+        })
     }
 }
 

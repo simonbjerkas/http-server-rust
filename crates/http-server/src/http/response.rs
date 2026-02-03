@@ -7,6 +7,9 @@ pub struct Response {
 }
 
 impl Response {
+    ///Create a new Response
+    ///
+    ///takes statuscode, headers and a body, where `Into<Vec<u8>>`is required on the body.
     pub fn new<B>(status: StatusCode, headers: Headers, body: B) -> Response
     where
         B: Into<Vec<u8>>,
@@ -45,7 +48,23 @@ impl Response {
 
     ///Ok
     ///
-    ///creates a default empty `200 Ok` response
+    ///creates a new response with a `200 OK`.
+    ///
+    ///Rquire a body where `Into<Vec<u8>>` is satisfied, as well as the headers expected for the response.
+    pub fn ok<B>(headers: Headers, body: B) -> Response
+    where
+        B: Into<Vec<u8>>,
+    {
+        Response {
+            status: StatusCode::Ok,
+            headers,
+            body: body.into(),
+        }
+    }
+
+    ///Sucess
+    ///
+    ///creates a default empty `200 OK` response
     pub fn success() -> Response {
         Response {
             status: StatusCode::Ok,

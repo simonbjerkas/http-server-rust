@@ -10,32 +10,24 @@ fn expand_method_route(
     let path = parse_macro_input!(attr as LitStr);
     let mut func = parse_macro_input!(item as ItemFn);
 
-    let public_name = func.sig.ident.clone(); // "health"
+    let public_name = func.sig.ident.clone();
     let handler_name = format_ident!("__handler_{}", public_name);
-    let routable_name = format_ident!("__Routable_{}", public_name);
 
-    // Rename the user's function to the hidden handler name
     func.sig.ident = handler_name.clone();
 
-    let myserver = quote!(::http_server);
-
     quote! {
-        // hidden handler fn (same body user wrote)
         #func
 
         #[allow(non_camel_case_types)]
-        pub struct #routable_name;
+        pub struct #public_name;
 
-        // This is what you pass to `app.service(health)`
-        #[allow(non_upper_case_globals)]
-        pub const #public_name: #routable_name = #routable_name;
-
-        impl #myserver::Routable for #routable_name {
-            fn route() -> #myserver::Route {
-                #myserver::Route {
-                    method: #myserver::Method::#method_variant,
-                    path: #path,
+        impl ::http_server::IntoRoute for #public_name {
+            fn into_route(self) -> ::http_server::Route {
+                ::http_server::Route {
+                    method: ::http_server::Method::#method_variant,
+                    path: String::from(#path),
                     handler: #handler_name,
+                    middleware: Vec::new(),
                 }
             }
         }

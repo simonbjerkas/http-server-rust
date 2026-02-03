@@ -24,7 +24,7 @@ fn safe_join(base: &Path, rel: &str) -> Option<PathBuf> {
 }
 
 #[get("/files/:path")]
-pub fn files(req: Request, ctx: &App) -> Response {
+pub fn read(req: Request, ctx: &App) -> Response {
     let Some(file_name) = req.param("path") else {
         return Response::not_found();
     };

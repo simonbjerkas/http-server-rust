@@ -1,6 +1,6 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
-use super::{App, ServerError, request::Request, response::Response};
+use super::{App, ServerError, middleware, request::Request, response::Response};
 
 pub enum StatusCode {
     Ok,
@@ -48,10 +48,18 @@ impl FromStr for Method {
 
 pub struct Route {
     pub method: Method,
-    pub path: &'static str,
+    pub path: String,
     pub handler: fn(Request, &App) -> Response,
+    pub middleware: Vec<Arc<dyn middleware::Middleware>>,
 }
 
-pub trait Routable {
-    fn route() -> Route;
+impl Route {
+    pub fn middleware<M: middleware::Middleware + 'static>(mut self, mw: M) -> Route {
+        self.middleware.push(Arc::new(mw));
+        self
+    }
+}
+
+pub trait IntoRoute {
+    fn into_route(self) -> Route;
 }

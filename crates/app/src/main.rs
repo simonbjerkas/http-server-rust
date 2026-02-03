@@ -1,6 +1,6 @@
 mod routes;
 
-use routes::{echo, files, root, upload, user_agent};
+use routes::{echo, files, root, user_agent};
 
 use std::{env, path::PathBuf};
 
@@ -24,11 +24,11 @@ fn main() {
     };
 
     let app = App::with_config(config)
-        .service(root)
-        .service(echo)
-        .service(user_agent)
-        .service(files)
-        .service(upload);
+        .service(root::index)
+        .service(echo::message)
+        .service(user_agent::agent)
+        .service(files::read)
+        .service(files::upload);
 
     if let Err(e) = Server::new(app).run() {
         eprintln!("error: {e}");

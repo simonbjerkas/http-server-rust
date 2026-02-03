@@ -1,4 +1,6 @@
+pub mod middleware;
 pub mod pool;
+pub mod scope;
 
 use std::{
     io::{BufReader, Write},
@@ -9,7 +11,7 @@ use std::{
 use anyhow::Result;
 use pool::ThreadPool;
 
-use super::{App, Request, Response, ServerError};
+use super::{App, Request, Response, Route, ServerError};
 
 pub struct Server {
     app: App,
@@ -41,7 +43,8 @@ impl Server {
                     }
                 };
 
-                let res = app.handle(request);
+                let mut res = app.handle(request);
+                res.finalize();
 
                 stream.write_all(&res.to_bytes()).unwrap();
             });
