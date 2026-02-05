@@ -5,7 +5,7 @@ use http_server::{
     middleware::{Next, middleware},
 };
 
-use flate2::{Compression, write::ZlibEncoder};
+use flate2::{Compression, write::GzEncoder};
 
 #[middleware]
 pub fn compression(req: Request, app: &App, next: Next) -> Response {
@@ -24,7 +24,7 @@ pub fn compression(req: Request, app: &App, next: Next) -> Response {
 
     let mut res = next.run(req, app);
 
-    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
     if let Err(e) = encoder.write_all(&mut res.body) {
         eprintln!("Failed to encode body: {e:?}");
         return Response::bad();
