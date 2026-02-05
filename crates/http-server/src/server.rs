@@ -33,20 +33,27 @@ impl Server {
             let app = Arc::clone(&app);
 
             pool.execute(move || {
-                let reader = BufReader::new(&mut stream);
-                let request = match Request::build(reader) {
-                    Ok(req) => req,
-                    Err(_) => {
-                        let res = Response::bad();
-                        stream.write_all(&res.to_bytes()).unwrap();
-                        return;
+                loop {
+                    let reader = BufReader::new(&mut stream);
+                    let request = match Request::build(reader) {
+                        Ok(req) => req,
+                        Err(_) => {
+                            let res = Response::bad();
+                            stream.write_all(&res.to_bytes()).unwrap();
+                            return;
+                        }
+                    };
+
+                    let close = request.headers.close_connection();
+                    let mut res = app.handle(request);
+                    res.finalize();
+
+                    stream.write_all(&res.to_bytes()).unwrap();
+
+                    if close {
+                        break;
                     }
-                };
-
-                let mut res = app.handle(request);
-                res.finalize();
-
-                stream.write_all(&res.to_bytes()).unwrap();
+                }
             });
         }
         Ok(())

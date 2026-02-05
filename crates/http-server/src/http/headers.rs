@@ -54,6 +54,10 @@ impl Headers {
             .get("content-type")
             .and_then(|v| v.parse().ok())
     }
+
+    pub(crate) fn close_connection(&self) -> bool {
+        self.entries.get("connection").is_some_and(|v| v == "close")
+    }
 }
 
 impl Headers {
