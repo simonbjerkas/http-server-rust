@@ -29,6 +29,7 @@ pub fn compression(req: Request, app: &App, next: Next) -> Response {
         eprintln!("Failed to encode body: {e:?}");
         return Response::bad();
     };
+    encoder.flush().unwrap();
 
     res.headers.insert("content-encoding", "gzip");
 
