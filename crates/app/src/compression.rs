@@ -9,26 +9,24 @@ use flate2::{Compression, write::GzEncoder};
 
 #[middleware]
 pub fn compression(req: Request, app: &App, next: Next) -> Response {
-    let Some(encoding) = req.headers.get("accept-encoding") else {
-        return next.run(req, app);
-    };
+    let supports_gzip = req
+        .headers
+        .get("accept-encoding")
+        .map(|v| v.split(',').map(str::trim).any(|enc| enc == "gzip"))
+        .unwrap_or(false);
 
-    if !encoding
-        .split(',')
-        .map(|v| v.trim())
-        .collect::<Vec<_>>()
-        .contains(&"gzip")
-    {
+    if !supports_gzip {
         return next.run(req, app);
     }
 
     let mut res = next.run(req, app);
 
     let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-    if let Err(e) = encoder.write_all(&mut res.body) {
-        eprintln!("Failed to encode body: {e:?}");
+    if encoder.write_all(&res.body).is_err() {
+        eprintln!("Failed to encode body");
         return Response::bad();
     };
+
     let Ok(compressed) = encoder.finish() else {
         return Response::bad();
     };
