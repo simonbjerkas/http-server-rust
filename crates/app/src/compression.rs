@@ -9,7 +9,12 @@ pub fn compression(req: Request, app: &App, next: Next) -> Response {
         return next.run(req, app);
     };
 
-    if encoding != "gzip" {
+    if !encoding
+        .split(',')
+        .map(|v| v.trim())
+        .collect::<Vec<_>>()
+        .contains(&"gzip")
+    {
         return next.run(req, app);
     }
 
