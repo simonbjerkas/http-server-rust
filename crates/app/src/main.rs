@@ -1,3 +1,4 @@
+mod compression;
 mod routes;
 
 use routes::{echo, files, root, user_agent};

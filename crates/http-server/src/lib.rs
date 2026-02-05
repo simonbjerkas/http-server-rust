@@ -16,8 +16,6 @@ pub use http_server_macros::{get, post};
 
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use crate::server::middleware::ScopedMiddleware;
-
 /// Configuration for the `App`struct.
 ///
 /// holds the directory from where files should be written and read on the server
@@ -80,7 +78,7 @@ impl App {
 
     pub fn scope(mut self, scope: scope::Scope) -> App {
         for mw in scope.middleware {
-            self.middleware.push(ScopedMiddleware {
+            self.middleware.push(middleware::ScopedMiddleware {
                 middleware: mw,
                 scope: middleware::MiddlewareScope::Prefix(scope.prefix.clone()),
             });
@@ -99,7 +97,7 @@ impl App {
     ///
     /// Consumes your current app and returns a new one
     pub fn middleware<M: middleware::Middleware + 'static>(mut self, mw: M) -> App {
-        self.middleware.push(ScopedMiddleware {
+        self.middleware.push(middleware::ScopedMiddleware {
             middleware: Arc::new(mw),
             scope: middleware::MiddlewareScope::Global,
         });
@@ -117,7 +115,7 @@ impl App {
         prefix: impl Into<String>,
         mw: M,
     ) -> App {
-        self.middleware.push(ScopedMiddleware {
+        self.middleware.push(middleware::ScopedMiddleware {
             middleware: Arc::new(mw),
             scope: middleware::MiddlewareScope::Prefix(prefix.into()),
         });

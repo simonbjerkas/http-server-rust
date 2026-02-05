@@ -2,8 +2,8 @@ use super::{StatusCode, headers::Headers};
 
 pub struct Response {
     status: StatusCode,
-    headers: Headers,
-    body: Vec<u8>,
+    pub headers: Headers,
+    pub body: Vec<u8>,
 }
 
 impl Response {
@@ -26,7 +26,7 @@ impl Response {
     ///should be called before sending the response
     ///
     /// Adds `Content-Lenght: [body.len()]` header to the response
-    pub fn finalize(&mut self) {
+    pub(crate) fn finalize(&mut self) {
         self.headers
             .insert("Content-Length", &self.body.len().to_string());
     }

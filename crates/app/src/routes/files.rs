@@ -46,10 +46,7 @@ pub fn read(req: Request, ctx: &App) -> Response {
     let mut headers = headers::Headers::new();
     headers.set_content_type(headers::ContentType::File);
 
-    let mut res = Response::new(StatusCode::Ok, headers, content);
-    res.finalize();
-
-    res
+    Response::new(StatusCode::Ok, headers, content)
 }
 
 #[post("/files/:path")]

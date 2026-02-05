@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use super::{App, Request, Response};
 
+pub use http_server_macros::middleware;
+
 pub struct Next<'a> {
     pub handler: Box<dyn Fn(Request, &App) -> Response + 'a>,
 }
