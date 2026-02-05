@@ -1,7 +1,11 @@
+use std::io::Write;
+
 use http_server::{
     App, Request, Response,
     middleware::{Next, middleware},
 };
+
+use flate2::{Compression, write::ZlibEncoder};
 
 #[middleware]
 pub fn compression(req: Request, app: &App, next: Next) -> Response {
@@ -19,6 +23,12 @@ pub fn compression(req: Request, app: &App, next: Next) -> Response {
     }
 
     let mut res = next.run(req, app);
+
+    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+    if let Err(e) = encoder.write_all(&mut res.body) {
+        eprintln!("Failed to encode body: {e:?}");
+        return Response::bad();
+    };
 
     res.headers.insert("content-encoding", "gzip");
 
