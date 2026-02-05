@@ -4,7 +4,7 @@ use http_server::{
 };
 
 #[middleware]
-fn compression(req: Request, app: &App, next: Next) -> Response {
+pub fn compression(req: Request, app: &App, next: Next) -> Response {
     let Some(encoding) = req.headers.get("accept-encoding") else {
         return next.run(req, app);
     };

@@ -25,6 +25,7 @@ fn main() {
     };
 
     let app = App::with_config(config)
+        .middleware(compression::compression)
         .service(root::index)
         .service(echo::message)
         .service(user_agent::agent)
