@@ -1,38 +1,60 @@
-[![progress-banner](https://backend.codecrafters.io/progress/http-server/4116e086-c790-4231-a648-a9cc8bfada83)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
+# http-server-rust
 
-This is a starting point for Rust solutions to the
-["Build Your Own HTTP server" Challenge](https://app.codecrafters.io/courses/http-server/overview).
+A hand-rolled HTTP/1.1 server written in Rust, built as part of the [CodeCrafters "Build Your Own HTTP Server" challenge](https://app.codecrafters.io/courses/http-server/overview).
 
-[HTTP](https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol) is the
-protocol that powers the web. In this challenge, you'll build a HTTP/1.1 server
-that is capable of serving multiple clients.
+## Features
 
-Along the way you'll learn about TCP servers,
-[HTTP request syntax](https://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html),
-and more.
+- **HTTP/1.1** — GET and POST support with proper status codes (200, 201, 400, 404)
+- **Routing** — Path-based routing with dynamic parameters (`:param` syntax), defined via `#[get]` / `#[post]` proc macros
+- **Persistent connections** — Keep-alive support; respects `Connection: close` to tear down gracefully
+- **Gzip compression** — Negotiated via `Accept-Encoding: gzip`, applied as middleware using `flate2`
+- **File serving** — `GET /files/:path` reads files from a configurable directory; `POST /files/:path` writes them
+- **Path traversal protection** — `safe_join()` blocks `..` and absolute paths
+- **Middleware pipeline** — Global and prefix-scoped middleware via a `Next`-handler chain
+- **Thread pool** — 10 workers over an `mpsc` channel, handles concurrent clients
 
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
+## Endpoints
 
-# Passing the first stage
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Health check — 200 OK |
+| GET | `/echo/:msg` | Echoes `:msg` back as plain text |
+| GET | `/user-agent` | Returns the `User-Agent` header value |
+| GET | `/files/:path` | Serves a file from the configured directory |
+| POST | `/files/:path` | Writes the request body to a file |
 
-The entry point for your HTTP server implementation is in `src/main.rs`. Study
-and uncomment the relevant code, and push your changes to pass the first stage:
+## Project layout
 
-```sh
-git commit -am "pass 1st stage" # any msg
-git push origin master
+```
+crates/
+  http-server/          # Core library — server, routing, middleware, HTTP types
+  http-server-macros/   # Proc macros: #[get], #[post], #[middleware]
+  app/                  # Binary — wires up routes, middleware, and CLI args
 ```
 
-Time to move on to the next stage!
+## Running
 
-# Stage 2 & beyond
+```sh
+cargo run --bin app -- --directory /tmp/files
+```
 
-Note: This section is for stages 2 and beyond.
+The server listens on `127.0.0.1:4221`.
 
-1. Ensure you have `cargo (1.92)` installed locally
-1. Run `./your_program.sh` to run your program, which is implemented in
-   `src/main.rs`. This command compiles your Rust project, so it might be slow
-   the first time you run it. Subsequent runs will be fast.
-1. Commit your changes and run `git push origin master` to submit your solution
-   to CodeCrafters. Test output will be streamed to your terminal.
+`--directory` sets the root for file serving/uploading (defaults to `.`).
+
+## Example
+
+```sh
+# Echo
+curl http://localhost:4221/echo/hello
+# → hello
+
+# Gzip
+curl -H "Accept-Encoding: gzip" http://localhost:4221/echo/hello | gunzip
+# → hello
+
+# Upload and retrieve a file
+curl -X POST http://localhost:4221/files/foo.txt -d "hello world"
+curl http://localhost:4221/files/foo.txt
+# → hello world
+```
